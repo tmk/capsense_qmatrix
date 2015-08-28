@@ -4,9 +4,10 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/delay.h>
-#include "common/wait.h"
+#include "util/print.h"
+#include "util/lufa.h"
 
-int main(void)
+static void setup_mcu(void)
 {
     /* Disable watchdog if enabled by bootloader/fuses */
     MCUSR &= ~(1 << WDRF);
@@ -14,6 +15,17 @@ int main(void)
 
     /* Disable clock division */
     clock_prescale_set(clock_div_1);
+}
+
+
+
+
+int main(void)
+{
+    setup_mcu();
+    setup_usb();
+
+
 
     // LED on
     DDRD = (1<<6);
@@ -29,15 +41,16 @@ int main(void)
     DDRF = 0x00;
     PORTF = 0x00;
 
-    cli();
+    //cli();
 
     for (;;) {
+        cli();
         DDRC= 0xFF;
         PORTC = 0x00;
         DDRF = 0x00;
         PORTF = 0x00;
 
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < 64; i++) {
             DDRF &= ~(1<<0); PORTF &= ~(1<<0);   // top: HiZ
             DDRF |=  (1<<1); PORTF &= ~(1<<1);   // bttom: Lo
             //DDRF &= ~(1<<2); PORTF &= ~(1<<2);   // slope: HiZ
@@ -83,6 +96,11 @@ int main(void)
         PORTF |= (1<<0) | (1<<1);
         DDRF |=  (1<<2); PORTF &=  ~(1<<2);   // slope: Lo
 */
+
+        sei();
+#if !defined(INTERRUPT_CONTROL_ENDPOINT)
+        USB_USBTask();
+#endif
     }
 
 
