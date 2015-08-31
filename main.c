@@ -48,8 +48,9 @@ int main(void)
         DDRF = 0x00;
         PORTF = 0x00;
 
-        // burst
-        for (int i = 0; i < 64; i++) {
+        // Burst
+        // lenght: 16-64
+        for (int i = 0; i < 32; i++) {
             DDRF &= ~(1<<0); PORTF &= ~(1<<0);   // top: HiZ
             DDRF |=  (1<<1); PORTF &= ~(1<<1);   // bttom: Lo
             //DDRF &= ~(1<<2); PORTF &= ~(1<<2);   // slope: HiZ
@@ -72,11 +73,24 @@ int main(void)
             //_delay_us(5);
         }
 
+        // Analog Comparator setup
+        // input+: AIN0 = GND
+        // input-: Multiplexer = bottom
+        ADMUX |= MUX1;  // bottom - Multiplexer select
+        ADCSRA &= ~(1<<ADEN);   // ADC disable
+        ADCSRB |= (1<<ACME);    // Analog Comparator Multiplexer Enable
+        //ACSR |= (1<<ACIC);      // Analog Comparator Input Capture Enable
+
         // sense
         DDRF |=  (1<<0); PORTF &= ~(1<<0);   // top: Lo 
         DDRF &= ~(1<<1); PORTF &= ~(1<<1);   // bttom: HiZ
         PORTF |=  (1<<2); DDRF |=  (1<<2);    // slope: Hi
-        _delay_us(300); //wait_us(100);
+
+        // Analog Comparator Output
+        uint16_t count = 0;
+        while (ACSR & (1<<ACO)) {
+            count++;
+        }
 
 
         // discharge capacitor top:Lo, bottom: Lo
@@ -89,5 +103,7 @@ int main(void)
 #if !defined(INTERRUPT_CONTROL_ENDPOINT)
         USB_USBTask();
 #endif
+        xprintf("\r%04X", count);
+        _delay_ms(10);
     }
 }
