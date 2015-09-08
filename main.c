@@ -147,27 +147,17 @@ int main(void)
             //_delay_us(50); //wait_us(100);
         }
 
-        //xprintf("\r%04X %04X %04X %04X %04X %04X",
-        xprintf("\033[H"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n"
-                "%04X %04X %04X %04X  %04X %04X %04X %04X\r\n",
-                counts[0][0], counts[0][1], counts[0][2], counts[0][3], counts[0][4], counts[0][5], counts[0][6], counts[0][7],
-                counts[1][0], counts[1][1], counts[1][2], counts[1][3], counts[1][4], counts[1][5], counts[1][6], counts[1][7],
-                counts[2][0], counts[2][1], counts[2][2], counts[2][3], counts[2][4], counts[2][5], counts[2][6], counts[2][7],
-                counts[3][0], counts[3][1], counts[3][2], counts[3][3], counts[3][4], counts[3][5], counts[3][6], counts[3][7],
-                counts[4][0], counts[4][1], counts[4][2], counts[4][3], counts[4][4], counts[4][5], counts[4][6], counts[4][7],
-                counts[5][0], counts[5][1], counts[5][2], counts[5][3], counts[5][4], counts[5][5], counts[5][6], counts[5][7],
-                counts[6][0], counts[6][1], counts[6][2], counts[6][3], counts[6][4], counts[6][5], counts[6][6], counts[6][7],
-                counts[7][0], counts[7][1], counts[7][2], counts[7][3], counts[7][4], counts[7][5], counts[7][6], counts[7][7]);
-
         sei();
-        _delay_ms(1);
+
+        xprintf("\033[H");
+        for (uint8_t x = 0; x < MATRIX_X; x++) {
+            for (uint8_t y = 0; y < MATRIX_Y; y++) {
+                xprintf("%04X ", counts[x][y]);
+            }
+            xprintf("\r\n");
+        }
+
+        //_delay_ms(1);
 
 #if !defined(INTERRUPT_CONTROL_ENDPOINT)
         USB_USBTask();
