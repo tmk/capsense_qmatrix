@@ -32,9 +32,9 @@ static void setup_mcu(void)
 static void burst(uint8_t x, uint8_t y)
 {
     // Burst: Hiz
-    DDRC= 0xFF; PORTC = 0x00;
+    DDRD= 0xFF; PORTD = 0x00;
     // Top: Lo
-    DDRD = 0x00; PORTD = 0x00;
+    DDRC = 0x00; PORTC = 0x00;
     // Bottom: Lo
     DDRF = 0xFF; PORTF = 0x00;
     // Slope:Hiz
@@ -43,27 +43,27 @@ static void burst(uint8_t x, uint8_t y)
     // Burst
     // lenght: 16-64
     for (int i = 0; i < 64; i++) {
-        HIZ(D);
+        HIZ(C);
         LO(F);
-        //DDRD &= ~(1<<y); PORTD &= ~(1<<y);   // top: HiZ
+        //DDRC &= ~(1<<y); PORTC &= ~(1<<y);   // top: HiZ
         //DDRF |=  (1<<y); PORTF &= ~(1<<y);   // bttom: Lo
 
         // rising edge
-        DDRC |= (1<<x); PORTC |= (1<<x);    // Burst: Hi
+        DDRD |= (1<<x); PORTD |= (1<<x);    // Burst: Hi
 
         _NOP(); _NOP(); _NOP(); _NOP(); _NOP(); // 1us cycle
 
         HIZ(F);
-        LO(D);
+        LO(C);
         //DDRF &= ~(1<<y); PORTF &= ~(1<<y);   // bttom: HiZ
-        //DDRD |=  (1<<y); PORTD &= ~(1<<y);   // top: Lo
+        //DDRC |=  (1<<y); PORTC &= ~(1<<y);   // top: Lo
 
         // falling edge
-        DDRC |= (1<<x); PORTC &= ~(1<<x);   // Burst: Lo
+        DDRD |= (1<<x); PORTD &= ~(1<<x);   // Burst: Lo
 
         _NOP();   // 1us cycle
     }
-        HIZ(D);
+        HIZ(C);
         LO(F);
 }
 
@@ -79,7 +79,7 @@ static uint16_t sense(uint8_t y)
 
     // sense
     DDRF  &= ~(1<<y); PORTF &= ~(1<<y); // bttom: HiZ
-    DDRD  |=  (1<<y); PORTD &= ~(1<<y); // top: Lo
+    DDRC  |=  (1<<y); PORTC &= ~(1<<y); // top: Lo
     PORTB |=  (1<<0); DDRB  |=  (1<<0); // slope: Hi
 
     // Analog Comparator Output
@@ -94,7 +94,7 @@ static uint16_t sense(uint8_t y)
 static void discharge(uint8_t y)
 {
     // discharge capacitor top:Lo, bottom: Lo
-    DDRD |=  (1<<y); PORTD &= ~(1<<y);  // top: Lo
+    DDRC |=  (1<<y); PORTC &= ~(1<<y);  // top: Lo
     DDRF |=  (1<<y); PORTF &= ~(1<<y);  // bttom: Lo
     DDRB |=  (1<<0); PORTB &= ~(1<<0);  // slope: Lo
     _delay_us(50); //wait_us(100);
@@ -110,12 +110,12 @@ int main(void)
 
 
     // burst signal PC0-7
-    DDRC = 0xFF;
-    PORTC = 0x00;
+    DDRD = 0xFF;
+    PORTD = 0x00;
 
     // top: PD0-7  LED(PD6): on(Hi)
-    DDRD = (1<<6); PORTD = (1<<6);
-    //DDRD = 0x00; PORTD = 0x00;
+    DDRC = (1<<6); PORTD = (1<<6);
+    //DDRC = 0x00; PORTC = 0x00;
 
     // bottom: PF0-7
     DDRF = 0x00;
@@ -140,7 +140,7 @@ int main(void)
             }
             //discharge(0);
             // discharge capacitor top:Lo, bottom: Lo
-            LO(D); //DDRD |=  (1<<y); PORTD &= ~(1<<y);  // top: Lo
+            LO(C); //DDRC |=  (1<<y); PORTC &= ~(1<<y);  // top: Lo
             LO(F); //DDRF |=  (1<<y); PORTF &= ~(1<<y);  // bttom: Lo
             //DDRB |=  (1<<0); PORTB &= ~(1<<0);  // slope: Lo
             //DDRB = 0xFF; PORTB = 0x00;
