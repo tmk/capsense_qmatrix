@@ -28,43 +28,94 @@ static void setup_mcu(void)
 #define HI(P)       do { DDR##P = 0xFF; PORT##P = 0xFF; } while (0)
 
 
-// x: burst, y: sense
-static void burst(uint8_t x, uint8_t y)
-{
-    // Burst: Hiz
-    DDRD= 0xFF; PORTD = 0x00;
-    // Top: Lo
-    DDRA = 0x00; PORTA = 0x00;
-    // Bottom: Lo
-    DDRF = 0xFF; PORTF = 0x00;
-    // Slope:Hiz
-    DDRB = 0x00; PORTB = 0x00;
+/* Burst X lines
+ * X0-7:    PD0-7
+ * X8-15:   PC0-7
+ */
+static void burst_hi(uint8_t x) {
+    if (x < 8) {
+        DDRD |= (1<<x); PORTD |= (1<<x);
+    } else {
+        DDRC |= (1<<(x&0x07)); PORTC |= (1<<(x&0x07));
+    }
+}
 
-    // Burst
-    // lenght: 16-64
-    for (int i = 0; i < 64; i++) {
-        HIZ(A);
-        LO(F);
-        //DDRA &= ~(1<<y); PORTA &= ~(1<<y);   // top: HiZ
-        //DDRF |=  (1<<y); PORTF &= ~(1<<y);   // bttom: Lo
+static void burst_lo(uint8_t x) {
+    if (x < 8) {
+        DDRD |= (1<<x); PORTD &= ~(1<<x);
+    } else {
+        DDRC |= (1<<(x&0x07)); PORTC &= ~(1<<(x&0x07));
+    }
+}
+
+static void burst_lo_all(void) {
+    DDRD= 0xFF; PORTD = 0x00;
+    DDRC= 0xFF; PORTC = 0x00;
+}
+static void burst_hi_all(void) {
+    DDRD= 0xFF; PORTD = 0xFF;
+    DDRC= 0xFF; PORTC = 0xFF;
+}
+static void burst_hiz_all(void) {
+    DDRD= 0x00; PORTD = 0x00;
+    DDRC= 0x00; PORTC = 0x00;
+}
+
+
+/* Sense Y lines
+ * Y0-7#Top:    PA0-7
+ * Y0-7#Bottom: PF0-7
+ */
+static void top_lo_all(void)        { LO(A); }
+static void top_hi_all(void)        { HI(A); }
+static void top_hiz_all(void)       { HIZ(A); }
+static void top_lo(uint8_t y)       { DDRA |=  (1<<y); PORTA &= ~(1<<y); }
+static void top_hi(uint8_t y)       { DDRA |=  (1<<y); PORTA |=  (1<<y); }
+static void top_hiz(uint8_t y)      { DDRA &= ~(1<<y); PORTA &= ~(1<<y); }
+static void bottom_lo_all(void)     { LO(F); }
+static void bottom_hi_all(void)     { HI(F); }
+static void bottom_hiz_all(void)    { HIZ(F); }
+static void bottom_lo(uint8_t y)    { DDRF |=  (1<<y); PORTF &= ~(1<<y); }
+static void bottom_hi(uint8_t y)    { DDRF |=  (1<<y); PORTF |=  (1<<y); }
+static void bottom_hiz(uint8_t y)   { DDRF &= ~(1<<y); PORTF &= ~(1<<y); }
+
+/* Slope line
+ * Slope:       PB0
+ */
+static void slope_lo(void)      { DDRB = 0xFF; PORTB = 0x00; }
+static void slope_hi(void)      { DDRB = 0xFF; PORTB = 0xFF; }
+static void slope_hiz(void)     { DDRB = 0x00; PORTB = 0x00; }
+
+
+// Charge sample capacitors with burst of pulse on X line
+// all capacitors on same Y line are charged at once
+static void burst(uint8_t x)
+{
+    burst_hiz_all();
+    top_lo_all();
+    bottom_lo_all();
+    slope_hiz();
+
+    // Burst length: 16-64
+    for (int i = 0; i < 128; i++) {
+        top_hiz_all();
+        bottom_lo_all();
 
         // rising edge
-        DDRD |= (1<<x); PORTD |= (1<<x);    // Burst: Hi
+        burst_hi(x);
 
         _NOP(); _NOP(); _NOP(); _NOP(); _NOP(); // 1us cycle
 
-        HIZ(F);
-        LO(A);
-        //DDRF &= ~(1<<y); PORTF &= ~(1<<y);   // bttom: HiZ
-        //DDRA |=  (1<<y); PORTA &= ~(1<<y);   // top: Lo
+        bottom_hiz_all();
+        top_lo_all();
 
         // falling edge
-        DDRD |= (1<<x); PORTD &= ~(1<<x);   // Burst: Lo
+        burst_lo(x);
 
         _NOP();   // 1us cycle
     }
-        HIZ(A);
-        LO(F);
+    top_hiz_all();
+    bottom_lo_all();
 }
 
 static uint16_t sense(uint8_t y)
@@ -78,9 +129,9 @@ static uint16_t sense(uint8_t y)
     //ACSR |=  (1<<ACIC);   // Analog Comparator Input Capture Enable
 
     // sense
-    DDRF  &= ~(1<<y); PORTF &= ~(1<<y); // bttom: HiZ
-    DDRA  |=  (1<<y); PORTA &= ~(1<<y); // top: Lo
-    PORTB |=  (1<<0); DDRB  |=  (1<<0); // slope: Hi
+    bottom_hiz(y);
+    top_lo(y);
+    slope_hi();
 
     // Analog Comparator Output
     uint16_t count = 0;
@@ -91,13 +142,11 @@ static uint16_t sense(uint8_t y)
     return count;
 }
 
-static void discharge(uint8_t y)
+static void discharge(void)
 {
-    // discharge capacitor top:Lo, bottom: Lo
-    DDRA |=  (1<<y); PORTA &= ~(1<<y);  // top: Lo
-    DDRF |=  (1<<y); PORTF &= ~(1<<y);  // bttom: Lo
-    DDRB |=  (1<<0); PORTB &= ~(1<<0);  // slope: Lo
-    _delay_us(50); //wait_us(100);
+    top_lo_all();
+    bottom_lo_all();
+    slope_hiz();
 }
 
 
@@ -106,44 +155,24 @@ int main(void)
     setup_mcu();
     setup_usb();
 
+    burst_lo_all();
+    top_hiz_all();
+    bottom_hiz_all();
+    slope_hiz();
 
 
-
-    // burst signal
-    DDRD = 0xFF;
-    PORTD = 0x00;
-
-    // top:
-    DDRA = 0x00; PORTA = 0x00;
-
-    // bottom: PF0-7
-    DDRF = 0x00;
-    PORTF = 0x00;
-
-    // slope: PB0
-    DDRB = 0x00;
-    PORTB = 0x00;
-
-#define MATRIX_X 8
+#define MATRIX_X 16
 #define MATRIX_Y 8
     for (;;) {
         cli();
 
         uint16_t counts[MATRIX_X][MATRIX_Y];
         for (uint8_t x = 0; x < MATRIX_X; x++) {
-            burst(x, 0);
+            burst(x);
             for (uint8_t y = 0; y < MATRIX_Y; y++) {
-                //burst(x, y);
                 counts[x][y] = sense(y);
-                //discharge(y);
             }
-            //discharge(0);
-            // discharge capacitor top:Lo, bottom: Lo
-            LO(A); //DDRA |=  (1<<y); PORTA &= ~(1<<y);  // top: Lo
-            LO(F); //DDRF |=  (1<<y); PORTF &= ~(1<<y);  // bttom: Lo
-            //DDRB |=  (1<<0); PORTB &= ~(1<<0);  // slope: Lo
-            //DDRB = 0xFF; PORTB = 0x00;
-            //_delay_us(50); //wait_us(100);
+            discharge();
         }
 
         sei();
