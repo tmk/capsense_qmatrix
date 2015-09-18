@@ -84,7 +84,7 @@ static void slope_hiz(void)     { DDRB = 0x00; PORTB = 0x00; }
  */
 static void burst(uint8_t x)
 {
-    burst_hiz_all();
+    burst_lo_all();
     top_lo_all();
     bottom_lo_all();
     slope_hiz();
