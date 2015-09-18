@@ -7,6 +7,7 @@
 #include "util/print.h"
 #include "util/lufa.h"
 
+
 static void setup_mcu(void)
 {
     /* Disable watchdog if enabled by bootloader/fuses */
@@ -17,15 +18,6 @@ static void setup_mcu(void)
     clock_prescale_set(clock_div_1);
 }
 
-
-/*
-#define HIZ(P, B)   do { DDR#P &= ~(1<<(B)); PORT#P &= ~(1<<(B)) } while (0)
-#define LO(P, B)    do { DDR#P |=  (1<<(B)); PORT#P &= ~(1<<(B)) } while (0)
-#define HI(P, B)    do { DDR#P |=  (1<<(B)); PORT#P |=  (1<<(B)) } while (0)
-*/
-#define HIZ(P)      do { DDR##P = 0x00; PORT##P = 0x00; } while (0)
-#define LO(P)       do { DDR##P = 0xFF; PORT##P = 0x00; } while (0)
-#define HI(P)       do { DDR##P = 0xFF; PORT##P = 0xFF; } while (0)
 
 
 /* Burst X lines
@@ -39,7 +31,6 @@ static void burst_hi(uint8_t x) {
         DDRC |= (1<<(x&0x07)); PORTC |= (1<<(x&0x07));
     }
 }
-
 static void burst_lo(uint8_t x) {
     if (x < 8) {
         DDRD |= (1<<x); PORTD &= ~(1<<x);
@@ -47,7 +38,6 @@ static void burst_lo(uint8_t x) {
         DDRC |= (1<<(x&0x07)); PORTC &= ~(1<<(x&0x07));
     }
 }
-
 static void burst_lo_all(void) {
     DDRD= 0xFF; PORTD = 0x00;
     DDRC= 0xFF; PORTC = 0x00;
@@ -66,18 +56,19 @@ static void burst_hiz_all(void) {
  * Y0-7#Top:    PA0-7
  * Y0-7#Bottom: PF0-7
  */
-static void top_lo_all(void)        { LO(A); }
-static void top_hi_all(void)        { HI(A); }
-static void top_hiz_all(void)       { HIZ(A); }
+static void top_lo_all(void)        { DDRA = 0xFF; PORTA = 0x00; }
+static void top_hi_all(void)        { DDRA = 0xFF; PORTA = 0xFF; }
+static void top_hiz_all(void)       { DDRA = 0x00; PORTA = 0x00; }
 static void top_lo(uint8_t y)       { DDRA |=  (1<<y); PORTA &= ~(1<<y); }
 static void top_hi(uint8_t y)       { DDRA |=  (1<<y); PORTA |=  (1<<y); }
 static void top_hiz(uint8_t y)      { DDRA &= ~(1<<y); PORTA &= ~(1<<y); }
-static void bottom_lo_all(void)     { LO(F); }
-static void bottom_hi_all(void)     { HI(F); }
-static void bottom_hiz_all(void)    { HIZ(F); }
+static void bottom_lo_all(void)     { DDRF = 0xFF; PORTF = 0x00; }
+static void bottom_hi_all(void)     { DDRF = 0xFF; PORTF = 0xFF; }
+static void bottom_hiz_all(void)    { DDRF = 0x00; PORTF = 0x00; }
 static void bottom_lo(uint8_t y)    { DDRF |=  (1<<y); PORTF &= ~(1<<y); }
 static void bottom_hi(uint8_t y)    { DDRF |=  (1<<y); PORTF |=  (1<<y); }
 static void bottom_hiz(uint8_t y)   { DDRF &= ~(1<<y); PORTF &= ~(1<<y); }
+
 
 /* Slope line
  * Slope:       PB0
@@ -87,8 +78,10 @@ static void slope_hi(void)      { DDRB = 0xFF; PORTB = 0xFF; }
 static void slope_hiz(void)     { DDRB = 0x00; PORTB = 0x00; }
 
 
-// Charge sample capacitors with burst of pulse on X line
-// all capacitors on same Y line are charged at once
+
+/* Charge sample capacitors with burst of pulse on X line
+ * all capacitors on same Y line are charged at once
+ */
 static void burst(uint8_t x)
 {
     burst_hiz_all();
@@ -97,7 +90,7 @@ static void burst(uint8_t x)
     slope_hiz();
 
     // Burst length: 16-64
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < 64; i++) {
         top_hiz_all();
         bottom_lo_all();
 
@@ -118,6 +111,7 @@ static void burst(uint8_t x)
     bottom_lo_all();
 }
 
+
 static uint16_t sense(uint8_t y)
 {
     // Analog Comparator setup
@@ -135,18 +129,33 @@ static uint16_t sense(uint8_t y)
 
     // Analog Comparator Output
     uint16_t count = 0;
+    cli();
     while (ACSR & (1<<ACO)) {
         count++;
     }
+    sei();
+
+    slope_hiz();
+    top_hiz(y);
+    bottom_hiz(y);
+
+    ADCSRB &= ~(1<<ACME);   // Analog Comparator Multiplexer Disable
 
     return count;
 }
+
 
 static void discharge(void)
 {
     top_lo_all();
     bottom_lo_all();
-    slope_hiz();
+    slope_lo();
+    _delay_us(10);
+}
+
+
+static void calibrate(void)
+{
 }
 
 
@@ -154,38 +163,60 @@ int main(void)
 {
     setup_mcu();
     setup_usb();
+    sei();
 
     burst_lo_all();
     top_hiz_all();
     bottom_hiz_all();
     slope_hiz();
 
-
+#define ABS(a, b)   ((a > b) ? (a - b) : (b - a))
 #define MATRIX_X 16
 #define MATRIX_Y 8
-    for (;;) {
-        cli();
+#define THRESHOLD_ON    0xA0
+#define THRESHOLD_OFF   0x50
 
         uint16_t counts[MATRIX_X][MATRIX_Y];
+        uint16_t avg[MATRIX_X][MATRIX_Y];
+        uint16_t key[MATRIX_X];
+        uint16_t s;
+        memset(counts, 0, sizeof(counts));
+        memset(avg, 0xef, sizeof(avg));
+        memset(key, 0, sizeof(key));
+
+    for (;;) {
+
         for (uint8_t x = 0; x < MATRIX_X; x++) {
             burst(x);
             for (uint8_t y = 0; y < MATRIX_Y; y++) {
-                counts[x][y] = sense(y);
+                s = sense(y);
+                counts[x][y] = (counts[x][y] & 0x8000) | s;
+
+                if (s > avg[x][y] + 0x40) {
+                    key[x] |= (1<<y);
+                    counts[x][y] |= 0x8000;
+                }
+               if (s < avg[x][y] + 0x30) {
+                    key[x] &= ~(1<<y);
+                    counts[x][y] &= ~0x8000;
+                }
+                // when key is off
+                if (!(counts[x][y] & 0x8000)) {
+                    avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (s>>2);
+                }
             }
             discharge();
         }
 
-        sei();
-
-        xprintf("\033[H");
+        xprintf("\033[H");  // Move cursor to upper left corner
         for (uint8_t x = 0; x < MATRIX_X; x++) {
             for (uint8_t y = 0; y < MATRIX_Y; y++) {
-                xprintf("%04X ", counts[x][y]);
+                xprintf("%04X(%04X) ", counts[x][y], avg[x][y]);
             }
             xprintf("\r\n");
         }
-
-        //_delay_ms(1);
+        xprintf("\033[J");  // Clear screen from cursor down
+        _delay_ms(1);
 
 #if !defined(INTERRUPT_CONTROL_ENDPOINT)
         USB_USBTask();
