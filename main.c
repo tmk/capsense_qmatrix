@@ -154,8 +154,27 @@ static void discharge(void)
 }
 
 
+
+#define ABS(a, b)   ((a > b) ? (a - b) : (b - a))
+#define MATRIX_X 16
+#define MATRIX_Y 8
+#define THRESHOLD_ON    0xA0
+#define THRESHOLD_OFF   0x50
+uint16_t avg[MATRIX_X][MATRIX_Y];
+
 static void calibrate(void)
 {
+    memset(avg, 0, sizeof(avg));
+    for (uint8_t i = 0; i < 255; i++) {
+        for (uint8_t x = 0; x < MATRIX_X; x++) {
+            burst(x);
+            for (uint8_t y = 0; y < MATRIX_Y; y++) {
+                avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
+            }
+            discharge();
+        }
+        _delay_ms(1);
+    }
 }
 
 
@@ -170,22 +189,17 @@ int main(void)
     bottom_hiz_all();
     slope_hiz();
 
-#define ABS(a, b)   ((a > b) ? (a - b) : (b - a))
-#define MATRIX_X 16
-#define MATRIX_Y 8
-#define THRESHOLD_ON    0xA0
-#define THRESHOLD_OFF   0x50
+    calibrate();
 
         uint16_t counts[MATRIX_X][MATRIX_Y];
-        uint16_t avg[MATRIX_X][MATRIX_Y];
         uint16_t key[MATRIX_X];
         uint16_t s;
         memset(counts, 0, sizeof(counts));
-        memset(avg, 0xef, sizeof(avg));
         memset(key, 0, sizeof(key));
 
     for (;;) {
 
+        // Scan matrix
         for (uint8_t x = 0; x < MATRIX_X; x++) {
             burst(x);
             for (uint8_t y = 0; y < MATRIX_Y; y++) {
@@ -202,7 +216,8 @@ int main(void)
                 }
                 // when key is off
                 if (!(counts[x][y] & 0x8000)) {
-                    avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (s>>2);
+                    // TODO: recalibrate threashold according to long time change
+                    //avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (s>>2);
                 }
             }
             discharge();
