@@ -38,36 +38,25 @@ static void burst_lo(uint8_t x) {
         DDRC |= (1<<(x&0x07)); PORTC &= ~(1<<(x&0x07));
     }
 }
-static void burst_lo_all(void) {
-    DDRD= 0xFF; PORTD = 0x00;
-    DDRC= 0xFF; PORTC = 0x00;
-}
-static void burst_hi_all(void) {
-    DDRD= 0xFF; PORTD = 0xFF;
-    DDRC= 0xFF; PORTC = 0xFF;
-}
-static void burst_hiz_all(void) {
-    DDRD= 0x00; PORTD = 0x00;
-    DDRC= 0x00; PORTC = 0x00;
-}
+static void burst_lo_all(void)  { DDRD= 0xFF; PORTD = 0x00; DDRC= 0xFF; PORTC = 0x00; }
+__attribute__ ((unused))
+static void burst_hi_all(void)  { DDRD= 0xFF; PORTD = 0xFF; DDRC= 0xFF; PORTC = 0xFF; }
+__attribute__ ((unused))
+static void burst_hiz_all(void) { DDRD= 0x00; PORTD = 0x00; DDRC= 0x00; PORTC = 0x00; }
 
 
 /* Sense Y lines
  * Y0-7#Top:    PA0-7
  * Y0-7#Bottom: PF0-7
  */
-static void top_lo_all(void)        { DDRA = 0xFF; PORTA = 0x00; }
-static void top_hi_all(void)        { DDRA = 0xFF; PORTA = 0xFF; }
-static void top_hiz_all(void)       { DDRA = 0x00; PORTA = 0x00; }
-static void top_lo(uint8_t y)       { DDRA |=  (1<<y); PORTA &= ~(1<<y); }
-static void top_hi(uint8_t y)       { DDRA |=  (1<<y); PORTA |=  (1<<y); }
-static void top_hiz(uint8_t y)      { DDRA &= ~(1<<y); PORTA &= ~(1<<y); }
-static void bottom_lo_all(void)     { DDRF = 0xFF; PORTF = 0x00; }
-static void bottom_hi_all(void)     { DDRF = 0xFF; PORTF = 0xFF; }
-static void bottom_hiz_all(void)    { DDRF = 0x00; PORTF = 0x00; }
-static void bottom_lo(uint8_t y)    { DDRF |=  (1<<y); PORTF &= ~(1<<y); }
-static void bottom_hi(uint8_t y)    { DDRF |=  (1<<y); PORTF |=  (1<<y); }
-static void bottom_hiz(uint8_t y)   { DDRF &= ~(1<<y); PORTF &= ~(1<<y); }
+static void top_lo_mask(uint8_t m)      { DDRA |=  m; PORTA &= ~m; }
+__attribute__ ((unused))
+static void top_hi_mask(uint8_t m)      { DDRA |=  m; PORTA |=  m; }
+static void top_hiz_mask(uint8_t m)     { DDRA &= ~m; PORTA &= ~m; }
+static void bottom_lo_mask(uint8_t m)   { DDRF |=  m; PORTF &= ~m; }
+__attribute__ ((unused))
+static void bottom_hi_mask(uint8_t m)   { DDRF |=  m; PORTF |=  m; }
+static void bottom_hiz_mask(uint8_t m)  { DDRF &= ~m; PORTF &= ~m; }
 
 
 /* Slope line
@@ -82,33 +71,33 @@ static void slope_hiz(void)     { DDRB = 0x00; PORTB = 0x00; }
 /* Charge sample capacitors with burst of pulse on X line
  * all capacitors on same Y line are charged at once
  */
-static void burst(uint8_t x)
+static void burst(uint8_t x, uint8_t ymask)
 {
     burst_lo_all();
-    top_lo_all();
-    bottom_lo_all();
+    top_lo_mask(ymask);
+    bottom_lo_mask(ymask);
     slope_hiz();
 
     // Burst length: 16-64
     for (int i = 0; i < 64; i++) {
-        top_hiz_all();
-        bottom_lo_all();
+        top_hiz_mask(ymask);
+        bottom_lo_mask(ymask);
 
         // rising edge
         burst_hi(x);
 
         _NOP(); _NOP(); _NOP(); _NOP(); _NOP(); // 1us cycle
 
-        bottom_hiz_all();
-        top_lo_all();
+        bottom_hiz_mask(ymask);
+        top_lo_mask(ymask);
 
         // falling edge
         burst_lo(x);
 
         _NOP();   // 1us cycle
     }
-    top_hiz_all();
-    bottom_lo_all();
+    top_hiz_mask(ymask);
+    bottom_lo_mask(ymask);
 }
 
 
@@ -123,8 +112,8 @@ static uint16_t sense(uint8_t y)
     //ACSR |=  (1<<ACIC);   // Analog Comparator Input Capture Enable
 
     // sense
-    bottom_hiz(y);
-    top_lo(y);
+    bottom_hiz_mask(1<<y);
+    top_lo_mask(1<<y);
     slope_hi();
 
     // Analog Comparator Output
@@ -136,8 +125,8 @@ static uint16_t sense(uint8_t y)
     sei();
 
     slope_hiz();
-    top_hiz(y);
-    bottom_hiz(y);
+    top_hiz_mask(1<<y);
+    bottom_hiz_mask(1<<y);
 
     ADCSRB &= ~(1<<ACME);   // Analog Comparator Multiplexer Disable
 
@@ -147,8 +136,8 @@ static uint16_t sense(uint8_t y)
 
 static void discharge(void)
 {
-    top_lo_all();
-    bottom_lo_all();
+    top_lo_mask(0xFF);
+    bottom_lo_mask(0xFF);
     slope_lo();
     _delay_us(10);
 }
@@ -167,8 +156,19 @@ static void calibrate(void)
     memset(avg, 0, sizeof(avg));
     for (uint8_t i = 0; i < 255; i++) {
         for (uint8_t x = 0; x < MATRIX_X; x++) {
-            burst(x);
-            for (uint8_t y = 0; y < MATRIX_Y; y++) {
+            // To reduce cross-talk between adjacent Y lines
+            // sense two odd and even group alternately. 
+            
+            // even group(0,2,4,6)
+            burst(x, 0x55);
+            for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
+                avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
+            }
+            discharge();
+
+            // odd group(1,3,5,7)
+            burst(x, 0xAA);
+            for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
                 avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
             }
             discharge();
@@ -185,27 +185,29 @@ int main(void)
     sei();
 
     burst_lo_all();
-    top_hiz_all();
-    bottom_hiz_all();
+    top_hiz_mask(0xFF);
+    bottom_hiz_mask(0xFF);
     slope_hiz();
 
     calibrate();
 
-        uint16_t counts[MATRIX_X][MATRIX_Y];
-        uint16_t key[MATRIX_X];
-        uint16_t s;
-        memset(counts, 0, sizeof(counts));
-        memset(key, 0, sizeof(key));
+    uint16_t counts[MATRIX_X][MATRIX_Y];
+    uint16_t key[MATRIX_X];
+    uint16_t s;
+    memset(counts, 0, sizeof(counts));
+    memset(key, 0, sizeof(key));
 
     for (;;) {
 
         // Scan matrix
         for (uint8_t x = 0; x < MATRIX_X; x++) {
-            burst(x);
-            for (uint8_t y = 0; y < MATRIX_Y; y++) {
+            // even group(0,2,4,6)
+            burst(x, 0x55);
+            for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
                 s = sense(y);
                 counts[x][y] = (counts[x][y] & 0x8000) | s;
 
+/*
                 if (s > avg[x][y] + 0x40) {
                     key[x] |= (1<<y);
                     counts[x][y] |= 0x8000;
@@ -219,6 +221,15 @@ int main(void)
                     // TODO: recalibrate threashold according to long time change
                     //avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (s>>2);
                 }
+*/
+            }
+            discharge();
+
+            // odd group(1,3,5,7)
+            burst(x, 0xAA);
+            for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
+                s = sense(y);
+                counts[x][y] = (counts[x][y] & 0x8000) | s;
             }
             discharge();
         }
