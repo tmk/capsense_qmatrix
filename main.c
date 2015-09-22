@@ -8,7 +8,7 @@
 #include "util/lufa.h"
 
 
-static void setup_mcu(void)
+static inline void setup_mcu(void)
 {
     /* Disable watchdog if enabled by bootloader/fuses */
     MCUSR &= ~(1 << WDRF);
@@ -24,47 +24,53 @@ static void setup_mcu(void)
  * X0-7:    PD0-7
  * X8-15:   PC0-7
  */
-static void burst_hi(uint8_t x) {
+__attribute__ ((always_inline))
+static inline void burst_hi(uint8_t x) {
     if (x < 8) {
         DDRD |= (1<<x); PORTD |= (1<<x);
     } else {
         DDRC |= (1<<(x&0x07)); PORTC |= (1<<(x&0x07));
     }
 }
-static void burst_lo(uint8_t x) {
+__attribute__ ((always_inline))
+static inline void burst_lo(uint8_t x) {
     if (x < 8) {
         DDRD |= (1<<x); PORTD &= ~(1<<x);
     } else {
         DDRC |= (1<<(x&0x07)); PORTC &= ~(1<<(x&0x07));
     }
 }
-static void burst_lo_all(void)  { DDRD= 0xFF; PORTD = 0x00; DDRC= 0xFF; PORTC = 0x00; }
-__attribute__ ((unused))
-static void burst_hi_all(void)  { DDRD= 0xFF; PORTD = 0xFF; DDRC= 0xFF; PORTC = 0xFF; }
-__attribute__ ((unused))
-static void burst_hiz_all(void) { DDRD= 0x00; PORTD = 0x00; DDRC= 0x00; PORTC = 0x00; }
+__attribute__ ((always_inline))
+static inline void burst_lo_all(void)  { DDRD= 0xFF; PORTD = 0x00; DDRC= 0xFF; PORTC = 0x00; }
+//static inline void burst_hi_all(void)  { DDRD= 0xFF; PORTD = 0xFF; DDRC= 0xFF; PORTC = 0xFF; }
+//static inline void burst_hiz_all(void) { DDRD= 0x00; PORTD = 0x00; DDRC= 0x00; PORTC = 0x00; }
 
 
 /* Sense Y lines
  * Y0-7#Top:    PA0-7
  * Y0-7#Bottom: PF0-7
  */
-static void top_lo_mask(uint8_t m)      { DDRA |=  m; PORTA &= ~m; }
-__attribute__ ((unused))
-static void top_hi_mask(uint8_t m)      { DDRA |=  m; PORTA |=  m; }
-static void top_hiz_mask(uint8_t m)     { DDRA &= ~m; PORTA &= ~m; }
-static void bottom_lo_mask(uint8_t m)   { DDRF |=  m; PORTF &= ~m; }
-__attribute__ ((unused))
-static void bottom_hi_mask(uint8_t m)   { DDRF |=  m; PORTF |=  m; }
-static void bottom_hiz_mask(uint8_t m)  { DDRF &= ~m; PORTF &= ~m; }
+__attribute__ ((always_inline))
+static inline void top_lo_mask(uint8_t m)      { DDRA |=  m; PORTA &= ~m; }
+//static inline void top_hi_mask(uint8_t m)      { DDRA |=  m; PORTA |=  m; }
+__attribute__ ((always_inline))
+static inline void top_hiz_mask(uint8_t m)     { DDRA &= ~m; PORTA &= ~m; }
+__attribute__ ((always_inline))
+static inline void bottom_lo_mask(uint8_t m)   { DDRF |=  m; PORTF &= ~m; }
+//static inline void bottom_hi_mask(uint8_t m)   { DDRF |=  m; PORTF |=  m; }
+__attribute__ ((always_inline))
+static inline void bottom_hiz_mask(uint8_t m)  { DDRF &= ~m; PORTF &= ~m; }
 
 
 /* Slope line
  * Slope:       PB0
  */
-static void slope_lo(void)      { DDRB = 0xFF; PORTB = 0x00; }
-static void slope_hi(void)      { DDRB = 0xFF; PORTB = 0xFF; }
-static void slope_hiz(void)     { DDRB = 0x00; PORTB = 0x00; }
+__attribute__ ((always_inline))
+static inline void slope_lo(void)      { DDRB |=  (1<<0); PORTB &= ~(1<<0); }
+__attribute__ ((always_inline))
+static inline void slope_hi(void)      { DDRB |=  (1<<0); PORTB |=  (1<<0); }
+__attribute__ ((always_inline))
+static inline void slope_hiz(void)     { DDRB &= ~(1<<0); PORTB &= ~(1<<0); }
 
 
 
@@ -86,7 +92,7 @@ static void burst(uint8_t x, uint8_t ymask)
         // rising edge
         burst_hi(x);
 
-        _NOP(); _NOP(); _NOP(); _NOP(); _NOP(); // 1us cycle
+        //_NOP(); _NOP(); _NOP(); _NOP(); _NOP(); // 1us cycle
 
         bottom_hiz_mask(ymask);
         top_lo_mask(ymask);
@@ -94,7 +100,7 @@ static void burst(uint8_t x, uint8_t ymask)
         // falling edge
         burst_lo(x);
 
-        _NOP();   // 1us cycle
+        //_NOP();   // 1us cycle
     }
     top_hiz_mask(ymask);
     bottom_lo_mask(ymask);
@@ -147,18 +153,18 @@ static void discharge(void)
 #define ABS(a, b)   ((a > b) ? (a - b) : (b - a))
 #define MATRIX_X 16
 #define MATRIX_Y 8
-#define THRESHOLD_ON    0xA0
-#define THRESHOLD_OFF   0x50
+#define THRESHOLD_ON    0x50
+#define HYSTERESIS      0x20
 uint16_t avg[MATRIX_X][MATRIX_Y];
 
 static void calibrate(void)
 {
     memset(avg, 0, sizeof(avg));
-    for (uint8_t i = 0; i < 255; i++) {
+    for (uint8_t i = 0; i < 64; i++) {
         for (uint8_t x = 0; x < MATRIX_X; x++) {
             // To reduce cross-talk between adjacent Y lines
-            // sense two odd and even group alternately. 
-            
+            // sense two odd and even group alternately.
+
             // even group(0,2,4,6)
             burst(x, 0x55);
             for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
@@ -173,7 +179,6 @@ static void calibrate(void)
             }
             discharge();
         }
-        _delay_ms(1);
     }
 }
 
@@ -205,23 +210,10 @@ int main(void)
             burst(x, 0x55);
             for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
                 s = sense(y);
-                counts[x][y] = (counts[x][y] & 0x8000) | s;
-
-/*
-                if (s > avg[x][y] + 0x40) {
-                    key[x] |= (1<<y);
-                    counts[x][y] |= 0x8000;
-                }
-               if (s < avg[x][y] + 0x30) {
-                    key[x] &= ~(1<<y);
-                    counts[x][y] &= ~0x8000;
-                }
-                // when key is off
-                if (!(counts[x][y] & 0x8000)) {
-                    // TODO: recalibrate threashold according to long time change
-                    //avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (s>>2);
-                }
-*/
+                counts[x][y] = s;
+                if (s > THRESHOLD_ON) key[x] |= (1<<y);
+                if (s < THRESHOLD_ON - HYSTERESIS) key[x] &= ~(1<<y);
+                if (key[x] & (1<<y)) counts[x][y] |= 0x1000;
             }
             discharge();
 
@@ -229,7 +221,10 @@ int main(void)
             burst(x, 0xAA);
             for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
                 s = sense(y);
-                counts[x][y] = (counts[x][y] & 0x8000) | s;
+                counts[x][y] = s;
+                if (s > THRESHOLD_ON) key[x] |= (1<<y);
+                if (s < THRESHOLD_ON - HYSTERESIS) key[x] &= ~(1<<y);
+                if (key[x] & (1<<y)) counts[x][y] |= 0x1000;
             }
             discharge();
         }
@@ -237,7 +232,7 @@ int main(void)
         xprintf("\033[H");  // Move cursor to upper left corner
         for (uint8_t x = 0; x < MATRIX_X; x++) {
             for (uint8_t y = 0; y < MATRIX_Y; y++) {
-                xprintf("%04X(%04X) ", counts[x][y], avg[x][y]);
+                xprintf("%04X(%04X)%c", counts[x][y], avg[x][y], (key[x] & (1<<y) ? '*' : ' '));
             }
             xprintf("\r\n");
         }
