@@ -85,7 +85,7 @@ static void burst(uint8_t x, uint8_t ymask)
     slope_hiz();
 
     // Burst length: 16-64
-    for (int i = 0; i < 64; i++) {
+    for (uint8_t i = 0; i < 64; i++) {
         top_hiz_mask(ymask);
         bottom_lo_mask(ymask);
 
@@ -136,16 +136,20 @@ static uint16_t sense(uint8_t y)
 
     ADCSRB &= ~(1<<ACME);   // Analog Comparator Multiplexer Disable
 
+    // discharge
+    top_lo_mask(1<<y);
+    bottom_lo_mask(1<<y);
+
     return count;
 }
 
 
-static void discharge(void)
+static void discharge_all(void)
 {
     top_lo_mask(0xFF);
     bottom_lo_mask(0xFF);
     slope_lo();
-    _delay_us(10);
+    //_delay_us(10);
 }
 
 
@@ -155,7 +159,7 @@ static void discharge(void)
 #define MATRIX_Y 8
 #define THRESHOLD_ON    0x50
 #define HYSTERESIS      0x20
-uint16_t avg[MATRIX_X][MATRIX_Y];
+uint8_t avg[MATRIX_X][MATRIX_Y];
 
 static void calibrate(void)
 {
@@ -169,15 +173,17 @@ static void calibrate(void)
             burst(x, 0x55);
             for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
                 avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
+                _delay_us(10);
             }
-            discharge();
+            discharge_all();
 
             // odd group(1,3,5,7)
             burst(x, 0xAA);
             for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
                 avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
+                _delay_us(10);
             }
-            discharge();
+            discharge_all();
         }
     }
 }
@@ -215,7 +221,7 @@ int main(void)
                 if (s < THRESHOLD_ON - HYSTERESIS) key[x] &= ~(1<<y);
                 if (key[x] & (1<<y)) counts[x][y] |= 0x1000;
             }
-            discharge();
+            discharge_all();
 
             // odd group(1,3,5,7)
             burst(x, 0xAA);
@@ -226,13 +232,13 @@ int main(void)
                 if (s < THRESHOLD_ON - HYSTERESIS) key[x] &= ~(1<<y);
                 if (key[x] & (1<<y)) counts[x][y] |= 0x1000;
             }
-            discharge();
+            discharge_all();
         }
 
         xprintf("\033[H");  // Move cursor to upper left corner
         for (uint8_t x = 0; x < MATRIX_X; x++) {
             for (uint8_t y = 0; y < MATRIX_Y; y++) {
-                xprintf("%04X(%04X)%c", counts[x][y], avg[x][y], (key[x] & (1<<y) ? '*' : ' '));
+                xprintf("%04X(%02X)%c", counts[x][y], avg[x][y], (key[x] & (1<<y) ? '*' : ' '));
             }
             xprintf("\r\n");
         }
