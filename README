@@ -1,10 +1,17 @@
-Realforce 106s
-==============
-Matrix
-Sense(Y)*8 / Burst(X)*16
+Capacitive Sense
+================
+This scans capacitive switch matrix using Atmel QMatrix method.
 
-Rxx means marking of resiter on PCB in the following.
 
+
+Realforce 106s Matrix
+=====================
+
+My controller scans matrix with 16 drive lines and 8 sense lines.
+Sense lines are multiplexed by ADC MUX of AT90USB1286.
+
+Row: Burst(X)*16
+Col: Sense(Y)*8
       0   1   2   3   4   5   6   7
       R14 R15 R16 R17 R18 R19 R20 R21
 0 R22 58  44  30  16  1   2   90A 110
@@ -29,6 +36,8 @@ F R40 108 103 102 106 101 105 -   126
 Meanwhile original Topre controller scans with 8 drive lines and 16 sense lines.
 Sense lines are multiplexed by two 74HC4051 analog multiplexers.
 
+Row: Burst(X)*8
+Col: Sense(Y)*16
     R22 R23 R24 R25 R26 R27 R28 R29     R33 R34 R35 R36 R37 R38 R39 R40
 R14 58  60  47  49  50  61  52  54      62  57  64  79  84  99  104 108
 R15 44  46  33  48  35  51  38  53      55  56  42  83  89  93  98  103
@@ -39,14 +48,15 @@ R19 2   4   5   6   0B  9   -   -       -   -   14  -   80  -   95  105
 R20 90A 112 -   131 0A  117 132 133     120 122 90B -   -   -   125 -
 R21 110 113 114 115 -   116 118 119     121 123 -   -   -   -   124 126
 
+Where Rxx means marking of resiter on PCB.
 
 
 
-Observations
-============
+Memo
+====
 - Other drive lines than bursted one should be grounded to remove influence of capacitances not under test.
-- Burst lines with resistors in series avoid divergence of sensing values. R=1KOhm
-- measured value of sense lines(Y) are infuenced depending on physical distance from drive lines(X)
+- Drive lines with resistor in series avoid divergence of sensing values. R=1KOhm
+- Measured value of sense lines(Y) are electromagnetically infuenced depending on physical distance from drive lines(X)
     I had to place sensing compoenets(Csample and Rs) apart from drive lines(PC0-7) to remove EMS influence.
 - Vaule changes
     - at startup: calculate threshold value of each node
@@ -75,33 +85,10 @@ Observations
     - how improve: fast burst pulse, short burst length, small Rsmp
 
 
-QMatrix API Flow -  QTouch Library
-==================================
-    qm_burst_length[]:  retains burst length for all channels
-    measurement_period_ms
-
-    touch_qm_sensor_init()
-    touch_qm_sensor_config()
-    touch_qm_sensor_calibrate()
-    loop:
-        touch_qm_sensor_dispatcher():   dispatches measure_complete_callback()
-        touch_qm_sensor_start_aquisition()
-        ... host app ...
 
 
-Post process
-============
-3.3 Tracking Base Capacitance Value
-http://www.ti.com/lit/an/slaa379/slaa379.pdf
-TI explains a patent expired method here. (not mutual sensing)
-
-Calibrating
-    compensate capacitance drift
-http://www.embedded.com/design/prototyping-and-development/4008781/Getting-in-touch-with-capacitance-sensor-algorithms
-
-
-QMatrix
-=======
+Resources
+=========
 Burst length
     number of charge pulses in a burst measurement
     Increasing BL increases signal resolution and sensitivity.
@@ -113,7 +100,7 @@ X-Y
     Y receiver, sense line
     YA port: charge transfer control(top)
     YB port: ADC mux input(bottom)
-self- mutual capacitance sense
+self/mutual capacitance sense
     self
     mutual
 ATMEL QTouch Library 
@@ -133,6 +120,15 @@ QTouchADC
 Charge transfer
 QTouch Composer
     extension for Atmel Studio 6
+
+
+3.3 Tracking Base Capacitance Value
+http://www.ti.com/lit/an/slaa379/slaa379.pdf
+TI explains a patent expired method here. (not mutual sensing)
+
+Calibrating
+    compensate capacitance drift
+http://www.embedded.com/design/prototyping-and-development/4008781/Getting-in-touch-with-capacitance-sensor-algorithms
 
 
 
@@ -171,3 +167,17 @@ Analog Devices CapTouch
 IBM patent: Keyboard multiple switch assembly 
     http://www.google.co.ug/patents/US4274752
     http://deskthority.net/f-o-r-s-a-l-e-f58/xwhatsit-s-grand-unified-ibm-capsense-usb-controller-thread-t7993-120.html#p165846
+
+
+QMatrix API Flow -  QTouch Library
+==================================
+    qm_burst_length[]:  retains burst length for all channels
+    measurement_period_ms
+
+    touch_qm_sensor_init()
+    touch_qm_sensor_config()
+    touch_qm_sensor_calibrate()
+    loop:
+        touch_qm_sensor_dispatcher():   dispatches measure_complete_callback()
+        touch_qm_sensor_start_aquisition()
+        ... host app ...
