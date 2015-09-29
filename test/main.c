@@ -1,14 +1,9 @@
-/*
-#include <avr/cpufunc.h>
+#include <string.h>
 #include <avr/wdt.h>
 #include <avr/power.h>
-#include <avr/interrupt.h>
-#include <avr/io.h>
-#include <util/delay.h>
-#include "util/print.h"
-#include "util/lufa.h"
-*/
 #include "capsense.h"
+#include "print.h"
+#include "lufa.h"
 
 
 static inline void setup_mcu(void)
@@ -22,6 +17,33 @@ static inline void setup_mcu(void)
 }
 
 
+uint8_t avg[MATRIX_X][MATRIX_Y];
+static void calibrate(void)
+{
+    memset(avg, 0, sizeof(avg));
+    for (uint8_t i = 0; i < 64; i++) {
+        for (uint8_t x = 0; x < MATRIX_X; x++) {
+            // To reduce cross-talk between adjacent Y lines
+            // sense two odd and even group alternately.
+
+            // even group(0,2,4,6)
+            burst(x, 0x55);
+            for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
+                avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
+                _delay_us(10);
+            }
+            discharge_all();
+
+            // odd group(1,3,5,7)
+            burst(x, 0xAA);
+            for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
+                avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
+                _delay_us(10);
+            }
+            discharge_all();
+        }
+    }
+}
 int main(void)
 {
     setup_mcu();

@@ -75,6 +75,7 @@ CONSOLE_ENABLE = yes
 # Search Path
 VPATH += $(TARGET_DIR)
 VPATH += $(TARGET_DIR)/..
+VPATH += $(TARGET_DIR)/util
 
 UTIL_DIR = util
 include $(UTIL_DIR)/files.mk

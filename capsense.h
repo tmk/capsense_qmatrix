@@ -1,14 +1,7 @@
 #ifndef CAPSENSE_H
 #define CAPSENSE_H
 
-#include <avr/cpufunc.h>
-#include <avr/wdt.h>
-#include <avr/power.h>
-#include <avr/interrupt.h>
 #include <avr/io.h>
-#include <util/delay.h>
-#include "util/print.h"
-#include "util/lufa.h"
 
 
 #define ABS(a, b)   ((a > b) ? (a - b) : (b - a))
@@ -17,7 +10,6 @@
 #define THRESHOLD_ON    0x50
 #define HYSTERESIS      0x20
 
-uint8_t avg[MATRIX_X][MATRIX_Y];
 
 /* Burst X lines
  * X0-7:    PD0-7
@@ -77,6 +69,5 @@ static inline void slope_hiz(void)     { DDRB &= ~(1<<0); PORTB &= ~(1<<0); }
 void burst(uint8_t x, uint8_t ymask);
 uint16_t sense(uint8_t y);
 void discharge_all(void);
-void calibrate(void);
 
 #endif
