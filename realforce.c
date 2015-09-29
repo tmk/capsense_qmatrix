@@ -28,27 +28,14 @@ uint8_t avg[MATRIX_X][MATRIX_Y];
 uint16_t counts[MATRIX_X][MATRIX_Y];
 uint16_t key[MATRIX_X];
 
-
-
 static void calibrate(void)
 {
     memset(avg, 0, sizeof(avg));
     for (uint8_t i = 0; i < 64; i++) {
         for (uint8_t x = 0; x < MATRIX_X; x++) {
-            // To reduce cross-talk between adjacent Y lines
-            // sense two odd and even group alternately.
-
-            // even group(0,2,4,6)
-            burst(x, 0x55);
-            for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
-                avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
-                _delay_us(10);
-            }
-            discharge_all();
-
-            // odd group(1,3,5,7)
-            burst(x, 0xAA);
-            for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
+            // To reduce cross-talk between adjacent Y lines burst them alternately.
+            burst(x, 0x55); burst(x, 0xAA);
+            for (uint8_t y = 0; y < MATRIX_Y; y++) {
                 avg[x][y] = avg[x][y] - (avg[x][y]>>2) + (sense(y)>>2);
                 _delay_us(10);
             }
@@ -56,6 +43,8 @@ static void calibrate(void)
         }
     }
 }
+
+
 uint8_t matrix_rows(void) { return MATRIX_ROWS; }
 uint8_t matrix_cols(void) { return MATRIX_COLS; }
 void matrix_setup(void) {
@@ -71,20 +60,9 @@ uint8_t matrix_scan(void) {
     uint16_t s;
     // Scan matrix
     for (uint8_t x = 0; x < MATRIX_X; x++) {
-        // even group(0,2,4,6)
-        burst(x, 0x55);
-        for (uint8_t y = 0; y < MATRIX_Y; y += 2) {
-            s = sense(y);
-            counts[x][y] = s;
-            if (s > THRESHOLD_ON) key[x] |= (1<<y);
-            if (s < THRESHOLD_ON - HYSTERESIS) key[x] &= ~(1<<y);
-            if (key[x] & (1<<y)) counts[x][y] |= 0x1000;
-        }
-        discharge_all();
-
-        // odd group(1,3,5,7)
-        burst(x, 0xAA);
-        for (uint8_t y = 1; y < MATRIX_Y; y += 2) {
+        // To reduce cross-talk between adjacent Y lines burst them alternately.
+        burst(x, 0x55); burst(x, 0xAA);
+        for (uint8_t y = 0; y < MATRIX_Y; y++) {
             s = sense(y);
             counts[x][y] = s;
             if (s > THRESHOLD_ON) key[x] |= (1<<y);
