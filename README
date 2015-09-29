@@ -1,5 +1,5 @@
-Capacitive Sense
-================
+Capacitive Sense - DIY Realforce 106s controller
+================================================
 This scans capacitive switch matrix using Atmel QMatrix method.
 
 
