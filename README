@@ -3,6 +3,15 @@ Capacitive Sense - DIY Realforce 106s controller
 This scans capacitive switch matrix using Atmel QMatrix method.
 
 
+TODO
+====
+- Calibration
+- Threshold
+- Use sense value for analog input
+- Test: voltage change, temperature change
+- Low voltage power supply
+- look into Topre capsense chip
+
 
 Realforce 106s Matrix
 =====================
